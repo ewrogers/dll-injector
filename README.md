@@ -24,7 +24,7 @@ injector load <dll_path>
 ```
 Example: `injector load C:\path\to\custom.dll`
 
-This will cause `DllMain` to be called with the  `DLL_REASON_PROCESS_ATTACH` reason.
+This will cause `DllMain` to be called with the  `DLL_PROCESS_ATTACH` reason.
 
 ### unload
 Unloads a DLL from a remote process. You may pass a full path, but only the filename portion is used.
@@ -35,4 +35,4 @@ injector unload <dll_name>
 ```
 Example: `injector unload custom.dll`
 
-This will cause `DllMain` to be called with the  `DLL_REASON_PROCESS_DETACH` reason.
+This will cause `DllMain` to be called with the  `DLL_PROCESS_DETACH` reason.
