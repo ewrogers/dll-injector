@@ -50,9 +50,9 @@ int main(int argc, char *argv[]) {
         _splitpath_s(parameter, NULL, 0, NULL, 0, filename, sizeof(filename), extension, sizeof(extension));
         strcat_s(filename, sizeof(filename), extension);
 
-        HMODULE arbiterAddr = getModuleHandleRemote(hProcess, filename);
-        if (arbiterAddr) {
-            printf("Library was found at 0x%p\n", arbiterAddr);
+        HMODULE hModule = getModuleHandleRemote(hProcess, filename);
+        if (hModule) {
+            printf("Library was found at 0x%p\n", hModule);
         } else {
             printf("Library not loaded\n");
         }
@@ -88,24 +88,24 @@ int main(int argc, char *argv[]) {
         _splitpath_s(parameter, NULL, 0, NULL, 0, filename, sizeof(filename), extension, sizeof(extension));
         strcat_s(filename, sizeof(filename), extension);
 
-        HMODULE arbiterAddr = getModuleHandleRemote(hProcess, filename);
-        if (arbiterAddr) {
+        HMODULE hModule = getModuleHandleRemote(hProcess, filename);
+        if (hModule) {
             printf("Already loaded, unloading library...\n");
         }
-        while (arbiterAddr) {
-            freeLibraryRemote(hProcess, arbiterAddr);
-            arbiterAddr = getModuleHandleRemote(hProcess, filename);
+        while (hModule) {
+            freeLibraryRemote(hProcess, hModule);
+            hModule = getModuleHandleRemote(hProcess, filename);
         }
 
-        arbiterAddr = loadLibraryRemote(hProcess, parameter);
-        if (arbiterAddr) {
-            printf("Successfully injected library at 0x%p\n", arbiterAddr);
+        hModule = loadLibraryRemote(hProcess, parameter);
+        if (hModule) {
+            printf("Successfully injected library at 0x%p\n", hModule);
         } else {
             printf("Unable to inject library!\n");
         }
 
         CloseHandle(hProcess);
-        return arbiterAddr != 0 ? 0 : 2;
+        return hModule != 0 ? 0 : 2;
     }
 
     // UNLOAD command
@@ -135,15 +135,15 @@ int main(int argc, char *argv[]) {
         _splitpath_s(parameter, NULL, 0, NULL, 0, filename, sizeof(filename), extension, sizeof(extension));
         strcat_s(filename, sizeof(filename), extension);
 
-        HMODULE arbiterAddr = getModuleHandleRemote(hProcess, filename);
-        if (arbiterAddr) {
-            printf("Library was found at 0x%p, unloading library...\n", arbiterAddr);
+        HMODULE hModule = getModuleHandleRemote(hProcess, filename);
+        if (hModule) {
+            printf("Library was found at 0x%p, unloading library...\n", hModule);
         } else {
             printf("Library not loaded, nothing to do\n");
         }
-        while (arbiterAddr) {
-            freeLibraryRemote(hProcess, arbiterAddr);
-            arbiterAddr = getModuleHandleRemote(hProcess, filename);
+        while (hModule) {
+            freeLibraryRemote(hProcess, hModule);
+            hModule = getModuleHandleRemote(hProcess, filename);
         }
 
         CloseHandle(hProcess);
