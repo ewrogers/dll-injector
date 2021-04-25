@@ -50,3 +50,9 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
+
+# JetBrains IDEA
+.idea/
+
+# Cmake Build
+cmake-build-*/
