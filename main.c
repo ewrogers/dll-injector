@@ -1,8 +1,9 @@
 #include "main.h"
 
 const LPCSTR DA_WINDOW_CLASS_NAME = "DarkAges";
-const LPCSTR LOAD_COMMAND = "load";
+const LPCSTR CONSOLE_COMMAND = "console";
 const LPCSTR CHECK_COMMAND = "check";
+const LPCSTR INJECT_COMMAND = "inject";
 const LPCSTR UNLOAD_COMMAND = "unload";
 const LPCSTR SHOW_HELP_COMMAND = "help";
 
@@ -23,8 +24,34 @@ int main(int argc, char *argv[]) {
         return 0;
     }
 
+    // CONSOLE command
+    if (!_strcmpi(command, CONSOLE_COMMAND)) {
+        printf("Finding DarkAges game client...\n");
+        DWORD processId = getProcessByWindow(DA_WINDOW_CLASS_NAME, NULL);
+        if (!processId) {
+            printf("No game clients were found!\n");
+            return 2;
+        }
+
+        HANDLE hProcess = openRemoteProcess(processId);
+        if (!hProcess) {
+            printf("Unable to open process!\n");
+            return 2;
+        }
+
+        printf("Allocating remote console...\n");
+        if (!allocConsoleRemote(hProcess)) {
+            printf("Unable to allocate console window!\n");
+            CloseHandle(hProcess);
+            return 2;
+        }
+
+        CloseHandle(hProcess);
+        return 0;
+    }
+
     // CHECK command
-    if (!_strcmpi(command, "check")) {
+    if (!_strcmpi(command, CHECK_COMMAND)) {
         if (!parameter || strlen(parameter) == 0) {
             printf("Missing DLL name\n");
             showHelp();
@@ -61,8 +88,8 @@ int main(int argc, char *argv[]) {
         return 0;
     }
 
-    // LOAD command
-    if (!_strcmpi(command, "load")) {
+    // INJECT command
+    if (!_strcmpi(command, INJECT_COMMAND)) {
         if (!parameter || strlen(parameter) == 0) {
             printf("Missing DLL path\n");
             showHelp();
@@ -109,7 +136,7 @@ int main(int argc, char *argv[]) {
     }
 
     // UNLOAD command
-    if (!_strcmpi(command, "unload")) {
+    if (!_strcmpi(command, UNLOAD_COMMAND)) {
         if (!parameter || strlen(parameter) == 0) {
             printf("Missing DLL name\n");
             showHelp();
@@ -153,10 +180,12 @@ int main(int argc, char *argv[]) {
 
 void showHelp() {
     printf("Available commands:\n");
+    printf("console - allocates and attaches to the console of a remote process\n");
+    printf("  usage: injector console\n");
     printf("check - checks if a DLL has been loaded into a remote process\n");
     printf("  usage: injector check <dll_name>\n");
-    printf("load - injects a DLL into a remote process\n");
-    printf("  usage: injector load <dll_path>\n");
+    printf("inject - injects a DLL into a remote process\n");
+    printf("  usage: injector inject <dll_path>\n");
     printf("unload - unloads a DLL from a remote process\n");
     printf("  usage: injector unload <dll_name>\n");
     printf("help - shows this help information\n");
@@ -178,93 +207,86 @@ HANDLE openRemoteProcess(DWORD processId) {
 }
 
 HMODULE getModuleHandleRemote(HANDLE hProcess, LPCSTR moduleName) {
-    DWORD remoteModule = 0;
-    FARPROC getModuleHandleProc = GetProcAddress(GetModuleHandleA("kernel32.dll"), "GetModuleHandleA");
-
-    DWORD memSize = strlen(moduleName) + 1;
-    LPVOID memPtr = VirtualAllocEx(hProcess, 0, memSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-    HANDLE hThread = NULL;
-
-    if (!memPtr) goto cleanup;
-
-    DWORD bytesWritten;
-    if (!WriteProcessMemory(hProcess, memPtr, moduleName, memSize, &bytesWritten)) {
-        goto cleanup;
-    }
-
-    DWORD threadId;
-    hThread = CreateRemoteThread(hProcess,
-                                 NULL,
-                                 0,
-                                 (LPTHREAD_START_ROUTINE)getModuleHandleProc,
-                                 memPtr,
-                                 0,
-                                 &threadId);
-
-    if (!hThread) goto cleanup;
-
-    WaitForSingleObject(hThread, INFINITE);
-    GetExitCodeThread(hThread, &remoteModule);
-
-    cleanup:
-    memPtr && VirtualFreeEx(hProcess, memPtr, memSize, MEM_RELEASE);
-    hThread && CloseHandle(hThread);
-    return (HMODULE)remoteModule;
+    DWORD exitCode;
+    return remoteCallAllocString(hProcess, "kernel32.dll", "GetModuleHandleA", moduleName, &exitCode)
+        ? (HMODULE)exitCode
+        : NULL;
 }
 
 HMODULE loadLibraryRemote(HANDLE hProcess, LPCSTR libraryPath) {
-    DWORD remoteModule = 0;
-    FARPROC loadLibraryProc = GetProcAddress(GetModuleHandleA("kernel32.dll"), "LoadLibraryA");
-
-    DWORD memSize = strlen(libraryPath) + 1;
-    LPVOID memPtr = VirtualAllocEx(hProcess, 0, memSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-    HANDLE hThread = NULL;
-
-    if (!memPtr) goto cleanup;
-
-    DWORD bytesWritten;
-    if (!WriteProcessMemory(hProcess, memPtr, libraryPath, memSize, &bytesWritten)) {
-        goto cleanup;
-    }
-
-    DWORD threadId;
-    hThread = CreateRemoteThread(hProcess,
-                                 NULL,
-                                 0,
-                                 (LPTHREAD_START_ROUTINE)loadLibraryProc,
-                                 memPtr,
-                                 0,
-                                 &threadId);
-
-    if (!hThread) goto cleanup;
-
-    WaitForSingleObject(hThread, INFINITE);
-    GetExitCodeThread(hThread, &remoteModule);
-
-    cleanup:
-    memPtr && VirtualFreeEx(hProcess, memPtr, memSize, MEM_RELEASE);
-    hThread && CloseHandle(hThread);
-    return (HMODULE)remoteModule;
+    DWORD exitCode;
+    return remoteCallAllocString(hProcess, "kernel32.dll", "LoadLibraryA", libraryPath, &exitCode)
+        ? (HMODULE)exitCode
+        : NULL;
 }
 
 BOOL freeLibraryRemote(HANDLE hProcess, HMODULE hModule) {
-    FARPROC freeLibraryProc = GetProcAddress(GetModuleHandleA("kernel32.dll"), "FreeLibrary");
+    DWORD exitCode;
+    return remoteCallNonAlloc(hProcess, "kernel32.dll", "FreeLibrary", hModule, &exitCode)
+        ? exitCode != 0
+        : FALSE;
+}
+
+BOOL allocConsoleRemote(HANDLE hProcess) {
+    DWORD exitCode;
+    return remoteCallNonAlloc(hProcess, "kernel32.dll", "AllocConsole", NULL, &exitCode);
+}
+
+BOOL attachConsoleRemote(HANDLE hProcess, DWORD processId) {
+    DWORD exitCode;
+    return remoteCallNonAlloc(hProcess, "kernel32.dll", "AttachConsole", (LPVOID)processId, &exitCode);
+}
+
+BOOL freeConsoleRemote(HANDLE hProcess) {
+    DWORD exitCode;
+    return remoteCallNonAlloc(hProcess, "kernel32.dll", "AttachConsole", NULL, &exitCode);
+}
+
+BOOL remoteCallAllocString(HANDLE hProcess, LPCSTR moduleName, LPCSTR procName, LPCSTR stringValue, LPDWORD exitCode) {
+    DWORD memSize = strlen(stringValue) + 1;
+    LPVOID memPtr = VirtualAllocEx(hProcess, 0, memSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+
+    if (!memPtr) return FALSE;
+
+    DWORD bytesWritten;
+    if (!WriteProcessMemory(hProcess, memPtr, stringValue, memSize, &bytesWritten)) {
+        VirtualFreeEx(hProcess, memPtr, memSize, MEM_RELEASE);
+        return FALSE;
+    }
+
+    char readBuffer[MAX_PATH];
+    memset(readBuffer, 0, sizeof(readBuffer));
+
+    DWORD bytesRead;
+    ReadProcessMemory(hProcess, memPtr, readBuffer, memSize, &bytesRead);
+
+    BOOL success = remoteCallNonAlloc(hProcess, moduleName, procName, memPtr, exitCode);
+
+    VirtualFreeEx(hProcess, memPtr, memSize, MEM_RELEASE);
+    return success;
+}
+
+BOOL remoteCallNonAlloc(HANDLE hProcess, LPCSTR moduleName, LPCSTR procName, LPVOID argument, LPDWORD exitCode) {
+    HMODULE hModule = GetModuleHandleA(moduleName);
+    if (!hModule) return FALSE;
+
+    FARPROC remoteProc = GetProcAddress(hModule, procName);
+    if (!remoteProc) return FALSE;
 
     DWORD threadId;
     HANDLE hThread = CreateRemoteThread(hProcess,
-                                 NULL,
-                                 0,
-                                 (LPTHREAD_START_ROUTINE)freeLibraryProc,
-                                 hModule,
-                                 0,
-                                 &threadId);
+                                        NULL,
+                                        0,
+                                        (LPTHREAD_START_ROUTINE)remoteProc,
+                                        argument,
+                                        0,
+                                        &threadId);
 
     if (!hThread) return FALSE;
 
-    DWORD exitCode;
     WaitForSingleObject(hThread, INFINITE);
-    GetExitCodeThread(hThread, &exitCode);
+    GetExitCodeThread(hThread, exitCode);
 
     CloseHandle(hThread);
-    return exitCode != 0;
+    return TRUE;
 }
