@@ -6,6 +6,14 @@ This command-line utility is used to load and unload DLLs into remote processes 
 
 ## Commands
 
+### console
+Allocates a console window for the remote process, allowing `printf` and other standard output to be viewable.
+
+**Usage:**
+```
+injector console
+```
+
 ### check
 Checks if a DLL has been loaded into a remote process.
 
@@ -15,14 +23,14 @@ injector check <dll_name>
 ```
 Example: `injector check winsock.dll`
 
-### load
-Loads a DLL into a remote process, unloading it first if already loaded. Absolute paths are recommended, since relative paths will be resolved in the context of the remote process' current working directory!
+### inject
+Injects a DLL into a remote process, unloading it first if already loaded. Absolute paths are recommended, since relative paths will be resolved in the context of the remote process' current working directory!
 
 **Usage:**
 ```
-injector load <dll_path>
+injector inject <dll_path>
 ```
-Example: `injector load C:\path\to\custom.dll`
+Example: `injector inject C:\path\to\custom.dll`
 
 This will cause `DllMain` to be called with the  `DLL_PROCESS_ATTACH` reason.
 
